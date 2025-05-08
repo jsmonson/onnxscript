@@ -70,6 +70,22 @@ def find_subgraph_outputs(nodes):
 
 def bGraphView(name, nodes):
 
+    # check that all nodes belong to the same graph
+    for node in nodes:
+        if node.graph != nodes[0].graph:
+            raise ValueError("All nodes must belong to the same graph")
+
+    graph = nodes[0].graph
+
+    print(f"Sorting nodes for GraphView: {name}")
+    # sort the nodes in topological order
+    graph.sort()
+    # add the nodes to the new list in the order they appear in the graph
+    sorted_nodes = []
+    for node in graph._nodes:
+        if node in nodes:
+            sorted_nodes.append(node)
+    nodes = sorted_nodes
 
     [view_inputs,  view_initializers] = find_subgraph_inputs(nodes)
     [view_outputs, used_outputs] = find_subgraph_outputs(nodes)
