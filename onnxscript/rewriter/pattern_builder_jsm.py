@@ -460,8 +460,13 @@ def build_constant_from_tensor(name, tensor):
 def build_concat_node_from_inputs(inputs):
 
     axis  = ir.Attr(name='axis', type=ir.AttributeType.INT, value=0)
-    ndim  = len(inputs) * inputs[0].shape.dims[0]
-    output_shape = ir.Shape([ndim, *inputs[0].shape.dims[1:]])
+
+    if len(inputs[0].shape.dims) == 0:
+        ndim  = len(inputs)
+        output_shape = ir.Shape([ndim])
+    else:
+        ndim  = len(inputs) * inputs[0].shape.dims[0]
+        output_shape = ir.Shape([ndim, *inputs[0].shape.dims[1:]])
     output       = ir.Value(name=f'{inputs[0].name}_concat', shape=output_shape, type=inputs[0].type)
     return ir.Node('', 'Concat', inputs=inputs, attributes=[axis], outputs=[output])
 

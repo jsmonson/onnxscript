@@ -30,6 +30,8 @@ def has_external_usage(usage):
 
 def classify_usage(value, nodes):
     usage = set()
+    if value in nodes[0].graph.outputs:
+        usage.add("EXTERNAL")
     for use in value.uses():
         user_node = use[0]
         if user_node in nodes:
