@@ -461,12 +461,8 @@ def build_concat_node_from_inputs(inputs):
 
     axis  = ir.Attr(name='axis', type=ir.AttributeType.INT, value=0)
 
-    if len(inputs[0].shape.dims) == 0:
-        ndim  = len(inputs)
-        output_shape = ir.Shape([ndim])
-    else:
-        ndim  = len(inputs) * inputs[0].shape.dims[0]
-        output_shape = ir.Shape([ndim, *inputs[0].shape.dims[1:]])
+    ndim  = len(inputs) * inputs[0].shape.dims[0]
+    output_shape = ir.Shape([ndim, *inputs[0].shape.dims[1:]])
     output       = ir.Value(name=f'{inputs[0].name}_concat', shape=output_shape, type=inputs[0].type)
     return ir.Node('', 'Concat', inputs=inputs, attributes=[axis], outputs=[output])
 
@@ -504,14 +500,24 @@ def build_loop_replace_pattern(graph, LoopBody):
                 graph_inputs.append(nvalue)
                 concat_inputs.append(nvalue)
 
-            concat_node = build_concat_node_from_inputs(concat_inputs)
-            graph_nodes.append(concat_node)
+            # if inputs are scalars then we need to manually perform a concat
+            if len(concat_inputs[0].shape.dims) == 0:
+                const_values_as_numpy = np.array([x.const_value.numpy() for x in concat_inputs])
+                const_values_as_tensor = ir.Tensor(const_values_as_numpy)
+                const_values_as_const_node = build_constant_from_tensor(f'concat_{i}', const_values_as_tensor)
+                graph_nodes.append(const_values_as_const_node)
 
-            # Build Reshape Node
-            reshape_shape_const = build_constant_from_tensor(f'reshape_shape_const_{i}', ir.Tensor(np.array([len(nodes),*concat_inputs[0].shape.dims])))
+                reshape_shape_const = build_constant_from_tensor(f'reshape_shape_const_{i}',
+                                                             ir.Tensor(np.array([len(concat_inputs), 1])))
+                reshape_node  = build_reshape_node(const_values_as_const_node.outputs[0], reshape_shape_const.outputs[0])
+            else:
+                concat_node = build_concat_node_from_inputs(concat_inputs)
+                graph_nodes.append(concat_node)
+                # Build Reshape Node
+                reshape_shape_const = build_constant_from_tensor(f'reshape_shape_const_{i}', ir.Tensor(np.array([len(nodes),*concat_inputs[0].shape.dims])))
+
+                reshape_node = build_reshape_node(concat_node.outputs[0], reshape_shape_const.outputs[0])
             graph_nodes.append(reshape_shape_const)
-
-            reshape_node = build_reshape_node(concat_node.outputs[0], reshape_shape_const.outputs[0])
             graph_nodes.append(reshape_node)
             loop_inputs.append(reshape_node.outputs[0])
         elif LoopInputType == LoopBodyInputType.CONSTANT:
@@ -545,7 +551,7 @@ def build_loop_replace_pattern(graph, LoopBody):
 
     graph.sort()
 
-    model = ir.serde.serialize_model(ir.Model(graph, ir_version=8))
+    model = ir.serde.serialize_model(ir.Model(graph, ir_version=10))
     onnx.save(model, 'replacementgraph.onnx')
 
     return ReplacementPatternGraph(graph)
